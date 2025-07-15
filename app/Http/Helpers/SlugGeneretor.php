@@ -3,6 +3,7 @@
 namespace App\Http\Helpers;
 
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Validator;
 
 
 trait SlugGeneretor
@@ -46,4 +47,23 @@ trait SlugGeneretor
             'errors' => $errors
         ], $code);
     }
+
+
+
+    function validateRequest($code,$request, $rules)
+    {
+        $validator = Validator::make($request, $rules);
+
+        if ($validator->fails()) {
+            return $this->error($code, 'Validation failed', $validator->errors());
+        }
+
+        return null; 
+    }
+
+
+
+
+
+
 }
