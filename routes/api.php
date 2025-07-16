@@ -14,20 +14,17 @@ Route::get('/user', function (Request $request) {
 
 
 
-   Route::post('/api/register',[AuthController::class,'register'] );
-   Route::post('/api/login',[AuthController::class,'login'] );
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
 
 
 
-Route::prefix('/api/user')->    middleware('auth:sanctum')->controller(AuthController::class)->group(function () {
+Route::prefix('/user')->middleware('auth:sanctum')->controller(AuthController::class)->group(function () {
 
     Route::get('/profile', 'profile');
-    Route::put('/profile', 'updateProfile');
-    Route::post('/logout', 'logout');
- 
- 
+    Route::put('/update/profile', 'updateProfile');
     Route::put('/password', 'updatePassword');
-    
+    Route::post('/logout', 'logout');
 });
 
 
@@ -40,25 +37,23 @@ Route::prefix('/api/user')->    middleware('auth:sanctum')->controller(AuthContr
 
 Route::prefix('/api/post')->controller(PostController::class)->group(function () {
 
-    Route::get('/','index');
-    Route::get('/{id}','show');
-    Route::post('/','store');
-    Route::put('/{id}','update');
-    Route::delete('/{id}','destroy');
-    Route::get('/search/{query}','search');
-    Route::get('/category/{categoryId}','getByCategory');
-    Route::get('/tag/{tagId}','getByTag');
-
-   
+    Route::get('/', 'index');
+    Route::get('/{id}', 'show');
+    Route::post('/', 'store');
+    Route::put('/{id}', 'update');
+    Route::delete('/{id}', 'destroy');
+    Route::get('/search/{query}', 'search');
+    Route::get('/category/{categoryId}', 'getByCategory');
+    Route::get('/tag/{tagId}', 'getByTag');
 });
 
 
 
 
 Route::prefix('/api/tag')->controller(TagController::class)->group(function () {
-    Route::get('/','index');
-    Route::get('/{id}','show');
-    Route::post('/','TagStore');
-    Route::put('/{id}','update');
-    Route::delete('/{id}','destroy');
+    Route::get('/', 'index');
+    Route::get('/{id}', 'show');
+    Route::post('/', 'TagStore');
+    Route::put('/{id}', 'update');
+    Route::delete('/{id}', 'destroy');
 });

@@ -2,14 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Helpers\SlugGeneretor;
 use App\Models\User;
+use Illuminate\Database\Console\Migrations\RollbackCommand;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller
 {
+
+    use SlugGeneretor;
     public function register(Request $request)
     {
 
@@ -20,29 +25,46 @@ class AuthController extends Controller
             'password' => 'required|string|min:8|confirmed',
         ]);
         if ($validatedData->fails()) {
-            return response()->json(['errors' => $validatedData->errors()], 422);
+            return $this->error(422, 'Validation failed', $validatedData->errors());
         }
 
-        // Registration logic
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ]);
 
+        try {
+            DB::beginTransaction();
 
-        $token = $user->createToken($user->name)->plainTextToken;
-        return response()->json(['token' => $token, 'user' => $user], 201);
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+            ]);
 
+            if ($user) {
 
+                $token = $user->createToken($user->name)->plainTextToken;
 
-        return response()->json([
-            'message' => 'User registered successfully',
-            'user' => $user,
-            'token' => $token
+                DB::commit();
 
-        ], 201);
+                return response()->json([
+                    'message' => 'User registered successfully',
+                    'user' => $user,
+                    'token' => $token
+                ], 201);
+            } else {
+                DB::rollBack();
+                return response()->json(['message' => 'User registration failed'], 500);
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'An error occurred during registration',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
+
+
+
+
 
     public function login(Request $request)
     {
@@ -100,20 +122,28 @@ class AuthController extends Controller
     public function updateProfile(Request $request)
     {
 
-        $user = Auth::user()->id;
-        if (!$user) {
-            return response()->json(['message' => 'User not authenticated'], 401);
-        }
-
+        $user = User::where('id', Auth::user()->id)->first();
         $validatedData = Validator::make($request->all(), [
-            'name' => 'sometimes|required|string|max:255',
+            'name' => 'required|string|max:255',
             'email' => 'sometimes|required|string|email|max:255|unique:users,email,' . $user->id,
             'avatar' => 'sometimes|nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
+
         if ($validatedData->fails()) {
-            return response()->json(['errors' => $validatedData->errors()], 422);
+            // dd($validatedData->errors());
+            return $this->error(422, 'Validation failed', $validatedData->errors());
         }
+
+
+        // dd($user);
+        // dd(Auth::user()->id);
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+
+
+
 
         if ($request->hasFile('avatar')) {
             $file = $request->file('avatar');
@@ -137,14 +167,16 @@ class AuthController extends Controller
         if (!$user) {
             return response()->json(['message' => 'User not authenticated'], 401);
         }
-        Auth::logout();
-        $user->tokens()->delete();
+        // Auth::logout();
+        $request->user()->currentAccessToken()->delete();
         return response()->json(['message' => 'Logged out successfully'], 200);
     }
 
     public function updatePassword(Request $request)
     {
-        $user  = Auth::user()->id;
+        // dd(Auth::user()->id);
+        $user  = User::where('id', Auth::user()->id)->first();
+        // dd($user);
         if (!$user) {
             return response()->json(['message' => 'User not authenticated'], 401);
         }
@@ -168,4 +200,3 @@ class AuthController extends Controller
         return response()->json(['message' => 'Password updated successfully'], 200);
     }
 }
-

@@ -15,7 +15,13 @@ class PostController extends Controller
     use SlugGeneretor;
     public function index()
     {
-        // Logic to return a list of posts
+        $posts = Post::with('tags')->paginate(10);
+
+        if ($posts->isEmpty()) {
+            return $this->error(404, 'No posts found');
+        }
+
+        return $this->success(200, 'Posts retrieved successfully', $posts);
     }
 
     public function show($id)
@@ -46,6 +52,7 @@ class PostController extends Controller
             'seo_meta' => 'nullable|array',
             'seo_meta.title' => 'nullable|string|max:255',
             'seo_meta.description' => 'nullable|string|max:500',
+            'media' => 'nullable|image|jpg,png,web|max:2048',
 
         ]);
 
@@ -73,11 +80,40 @@ class PostController extends Controller
         $post->user_id = Auth::user()->id;
         $post->save();
 
+        $post->tags()->attach($request->tags);
+
+        if ($request->hasFile('media')) {
+            // Handle cover image upload
+            $mediaImage = $request->file('media');
+            $mediaName = time() . '_' . $mediaImage->getClientOriginalName();
+            $mediaSlug = $this->generateSlug($mediaName);
+             $mediaImage->storeAs('posts/media', $mediaName, 'public');
+             $mediaPath = asset('storage/posts/media/' . $mediaName);
+            $post->media()->create([
+                'file_name' => $mediaName,
+                'file_path' => $mediaPath,
+                'file_type' => $mediaImage->getClientMimeType(),
+                'file_size' => $mediaImage->getSize(),
+                'slug' => $mediaSlug,
+                'user_id' => Auth::user()->id,
+                'post_id' => $post->id,
+            ]);
+           
+          
+        }
+
+
         if (!$post) {
             return $this->error(500, 'Failed to create post');
         } else {
             return $this->success(201, 'Post created successfully', $post);
         }
+
+
+
+
+
+
     }
 
 
@@ -104,6 +140,9 @@ class PostController extends Controller
             'seo_meta' => 'nullable|array',
             'seo_meta.title' => 'nullable|string|max:255',
             'seo_meta.description' => 'nullable|string|max:500',
+            'media' => 'nullable|image|jpg,png,web|max:2048',
+             'tags' => 'nullable|array',
+            'tags.*' => 'exists:tags,id',
         ]);
 
         if ($validatedData->fails()) {
@@ -116,10 +155,28 @@ class PostController extends Controller
         $post->published_at = $request->input('published_at', $post->published_at);
         $post->seo_meta = $request->input('seo_meta', $post->seo_meta);
 
-        if ($request->hasFile('cover_image')) {
-            // Handle cover image upload
+        if ($request->hasFile('media')) {
+            $mediaImage = $request->file('media');
+            $mediaName = time() . '_' . $mediaImage->getClientOriginalName();
+            $mediaSlug = $this->generateSlug($mediaName);
+            $mediaImage->storeAs('posts/media', $mediaName, 'public');
+            $mediaPath = asset('storage/posts/media/' . $mediaName);
+            $post->media()->updateOrCreate(
+                ['post_id' => $post->id],
+                [
+                    'file_name' => $mediaName, 
+                    'file_path' => $mediaPath,
+                    'file_type' => $mediaImage->getClientMimeType(),
+                    'file_size' => $mediaImage->getSize(),
+                    'slug' => $mediaSlug,
+                    'user_id' => Auth::user()->id,
+                
+                ]);
+           
         }
 
+
+        $post->tags()->sync($request->input('tags', []));
         $post->save();
 
         return $this->success(200, 'Post updated successfully', $post);
