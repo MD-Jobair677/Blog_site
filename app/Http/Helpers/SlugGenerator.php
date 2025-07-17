@@ -6,7 +6,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
 
 
-trait SlugGeneretor
+trait SlugGenerator
 {
     public function generateSlug($title)
     {
@@ -14,7 +14,8 @@ trait SlugGeneretor
         $slug = Str::slug($title, '-');
 
         // Check if the slug already exists in the database
-        $count = \App\Models\Post::where('slug', $slug)->count();
+       $count = \App\Models\Post::where('slug', 'LIKE', "%{$slug}%")->count();
+
 
         // If it exists, append a number to make it unique
         if ($count > 0) {
@@ -50,9 +51,9 @@ trait SlugGeneretor
 
 
 
-    function validateRequest($code,$request, $rules)
+    function validateRequest($code,$data, $rules)
     {
-        $validator = Validator::make($request, $rules);
+        $validator = Validator::make($data, $rules);
 
         if ($validator->fails()) {
             return $this->error($code, 'Validation failed', $validator->errors());

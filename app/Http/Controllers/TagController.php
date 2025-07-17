@@ -4,16 +4,19 @@ namespace App\Http\Controllers;
 
 use App\Models\Tag;
 use Illuminate\Http\Request;
-use App\Http\Helpers\SlugGeneretor;
+use App\Http\Helpers\SlugGenerator;
 
 class TagController extends Controller
 {
 
-    use SlugGeneretor;
-    protected $rules = [
-        'name' => 'required|string|max:255|unique:tags,name',
-        'description' => 'nullable|string|max:500',
+    use SlugGenerator;
+   protected function rules($id = null)
+{
+    return [
+        'name' => 'required|string|max:255|unique:tags,name' . ($id ? ',' . $id : ''),
+        // 'description' => 'nullable|string|max:500',
     ];
+}
     public function index()
     {
         $tags = Tag::all();
@@ -25,9 +28,9 @@ class TagController extends Controller
         return $this->success(200, 'Tags retrieved successfully', $tags);
     }
 
-    public function show($id)
+    public function showTagById($id)
     {
-      
+
         $tag = Tag::find($id);
 
         if (!$tag) {
@@ -39,14 +42,29 @@ class TagController extends Controller
 
     public function TagStore(Request $request)
     {
-        return  $this->validateRequest(404,$request->all(), $this->rules);
 
+
+        $validatedData =   $this->validateRequest(404, $request->all(), $this->rules());
+
+        if ($validatedData) {
+            return $validatedData;
+        }
+        //    dd($request->all());
         $tag = new Tag();
         $tag->name = $request->name;
         $tag->slug = $this->generateSlug($request->name);
         $tag->save();
 
+        return $this->success(201, 'Tag created successfully', $tag);
+
+
+
     }
+
+
+
+
+
 
     public function update(Request $request, $id)
     {
@@ -56,7 +74,7 @@ class TagController extends Controller
             return $this->error(404, 'Tag not found');
         }
 
-        $validatedData = $this->validateRequest(422, $request->all(), $this->rules);
+        $validatedData = $this->validateRequest(422, $request->all(), $this->rules($id));
 
         if ($validatedData) {
             return $validatedData;
@@ -64,7 +82,7 @@ class TagController extends Controller
 
         $tag->name = $request->name;
         $tag->slug = $this->generateSlug($request->name);
-    
+
         $tag->save();
 
         return $this->success(200, 'Tag updated successfully', $tag);

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Helpers\SlugGeneretor;
+use App\Http\Helpers\SlugGenerator;
 use App\Models\User;
 use Illuminate\Database\Console\Migrations\RollbackCommand;
 use Illuminate\Http\Request;
@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 class AuthController extends Controller
 {
 
-    use SlugGeneretor;
+    use SlugGenerator;
     public function register(Request $request)
     {
 

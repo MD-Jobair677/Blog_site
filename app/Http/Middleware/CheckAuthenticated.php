@@ -19,6 +19,19 @@ class CheckAuthenticated
 
 // dd($request->path());
 
+
+// $authenticated = Auth::user();
+
+// if (!$authenticated) {
+
+//     return response()->json([
+//         'status' => false,
+//         'message' => 'Unauthorized access. Please login first!'
+//     ], 401);
+// }
+
+
+
         if($request->is('api/login') || $request->is('api/register')) {
           return  $next($request);
         } else if( $request->is('api/*')  && !Auth::guard('sanctum')->check()) {

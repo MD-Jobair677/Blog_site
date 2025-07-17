@@ -4,18 +4,21 @@ namespace App\Http\Controllers;
 
 
 use App\Models\Post;
+
+
+use App\Http\Helpers\CheckIsPostUser;
 use Illuminate\Http\Request;
-use App\Http\Helpers\SlugGeneretor;
+use App\Http\Helpers\SlugGenerator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 
 class PostController extends Controller
 {
 
-    use SlugGeneretor;
+    use SlugGenerator, CheckIsPostUser;
     public function index()
     {
-        $posts = Post::with('tags')->paginate(10);
+        $posts = Post::with(['tags', 'media'])->orderBy('created_at', 'desc')->paginate(10);
 
         if ($posts->isEmpty()) {
             return $this->error(404, 'No posts found');
@@ -24,10 +27,10 @@ class PostController extends Controller
         return $this->success(200, 'Posts retrieved successfully', $posts);
     }
 
-    public function show($id)
+    public function showPostById($id)
     {
 
-        $post = Post::find($id);
+        $post = Post::with(['tags', 'media'])->find($id);
 
         if (!$post) {
             return $this->error(404, 'Post not found');
@@ -44,15 +47,16 @@ class PostController extends Controller
             'title' => 'required|string|max:255',
             'content' => 'required|string',
 
-            'tags' => 'nullable|array',
+            'tags' => 'required|array',
             'tags.*' => 'exists:tags,id',
             'status' => 'in:draft,published,scheduled',
             'published_at' => 'nullable|date',
             'cover_image' => 'nullable|image|max:2048',
-            'seo_meta' => 'nullable|array',
-            'seo_meta.title' => 'nullable|string|max:255',
-            'seo_meta.description' => 'nullable|string|max:500',
-            'media' => 'nullable|image|jpg,png,web|max:2048',
+            'seo_meta' => 'required|array',
+            'seo_meta.title' => 'required|string|max:255',
+            'seo_meta.description' => 'required|string|max:500',
+            'media' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+
 
         ]);
 
@@ -74,7 +78,7 @@ class PostController extends Controller
         $post->slug = $this->generateSlug($request->title);
 
         $post->status = $request->status ?? 'draft';
-        $post->published_at = $request->published_at;
+        $post->published_at = now()->format('Y-m-d H:i:s');
 
         $post->seo_meta = $request->seo_meta;
         $post->user_id = Auth::user()->id;
@@ -86,9 +90,9 @@ class PostController extends Controller
             // Handle cover image upload
             $mediaImage = $request->file('media');
             $mediaName = time() . '_' . $mediaImage->getClientOriginalName();
-            $mediaSlug = $this->generateSlug($mediaName);
-             $mediaImage->storeAs('posts/media', $mediaName, 'public');
-             $mediaPath = asset('storage/posts/media/' . $mediaName);
+            $mediaSlug = $this->generateSlug($request->title);
+            $mediaImage->storeAs('posts/media', $mediaName, 'public');
+            $mediaPath = asset('storage/posts/media/' . $mediaName);
             $post->media()->create([
                 'file_name' => $mediaName,
                 'file_path' => $mediaPath,
@@ -98,8 +102,6 @@ class PostController extends Controller
                 'user_id' => Auth::user()->id,
                 'post_id' => $post->id,
             ]);
-           
-          
         }
 
 
@@ -108,12 +110,6 @@ class PostController extends Controller
         } else {
             return $this->success(201, 'Post created successfully', $post);
         }
-
-
-
-
-
-
     }
 
 
@@ -126,65 +122,74 @@ class PostController extends Controller
     public function update(Request $request, $id)
     {
         $post = Post::find($id);
+        // dd($request->all());
 
         if (!$post) {
             return $this->error(404, 'Post not found');
         }
 
-        $validatedData = Validator::make($request->all(), [
-            'title' => 'sometimes|required|string|max:255',
-            'content' => 'sometimes|required|string',
-            'status' => 'sometimes|in:draft,published,scheduled',
-            'published_at' => 'nullable|date',
-            'cover_image' => 'nullable|image|max:2048',
-            'seo_meta' => 'nullable|array',
-            'seo_meta.title' => 'nullable|string|max:255',
-            'seo_meta.description' => 'nullable|string|max:500',
-            'media' => 'nullable|image|jpg,png,web|max:2048',
-             'tags' => 'nullable|array',
-            'tags.*' => 'exists:tags,id',
-        ]);
 
-        if ($validatedData->fails()) {
-            return $this->error(422, 'Validation failed', $validatedData->errors());
+
+        $isPostAuth =$this->checkIsPostUserById($id);
+
+
+        if ($isPostAuth !== true) {
+            return $isPostAuth; // Return the error response if unauthorized
+        } else {
+            // Proceed with the update
+
+
+            $validatedData = Validator::make($request->all(), [
+                'title' => 'required|string|max:255',
+                'content' => 'required|string',
+                'status' => 'in:draft,published,scheduled',
+                'published_at' => 'date',
+                'cover_image' => 'image|max:2048',
+                'seo_meta' => 'nullable|array',
+                'seo_meta.title' => 'nullable|string|max:255',
+                'seo_meta.description' => 'nullable|string|max:500',
+                'media' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+                'tags' => 'nullable|array',
+                'tags.*' => 'exists:tags,id',
+            ]);
+
+
+            if ($validatedData->fails()) {
+                return $this->error(422, 'Validation failed', $validatedData->errors());
+            }
+
+            $post->title = $request->input('title', $post->title);
+            $post->content = $request->input('content', $post->content);
+            $post->status = $request->input('status', $post->status);
+            $post->published_at = $request->input('published_at', $post->published_at);
+            $post->seo_meta = $request->input('seo_meta', $post->seo_meta);
+
+            if ($request->hasFile('media')) {
+                $mediaImage = $request->file('media');
+                $mediaName = time() . '_' . $mediaImage->getClientOriginalName();
+                $mediaSlug = $this->generateSlug($mediaName);
+                $mediaImage->storeAs('posts/media', $mediaName, 'public');
+                $mediaPath = asset('storage/posts/media/' . $mediaName);
+                $post->media()->updateOrCreate(
+                    ['post_id' => $post->id],
+                    [
+                        'file_name' => $mediaName,
+                        'file_path' => $mediaPath,
+                        'file_type' => $mediaImage->getClientMimeType(),
+                        'file_size' => $mediaImage->getSize(),
+                        'slug' => $mediaSlug,
+                        'user_id' => Auth::user()->id,
+
+                    ]
+                );
+            }
+
+
+            $post->tags()->sync($request->input('tags', []));
+            $post->save();
+
+            return $this->success(200, 'Post updated successfully', $post);
         }
-
-        $post->title = $request->input('title', $post->title);
-        $post->content = $request->input('content', $post->content);
-        $post->status = $request->input('status', $post->status);
-        $post->published_at = $request->input('published_at', $post->published_at);
-        $post->seo_meta = $request->input('seo_meta', $post->seo_meta);
-
-        if ($request->hasFile('media')) {
-            $mediaImage = $request->file('media');
-            $mediaName = time() . '_' . $mediaImage->getClientOriginalName();
-            $mediaSlug = $this->generateSlug($mediaName);
-            $mediaImage->storeAs('posts/media', $mediaName, 'public');
-            $mediaPath = asset('storage/posts/media/' . $mediaName);
-            $post->media()->updateOrCreate(
-                ['post_id' => $post->id],
-                [
-                    'file_name' => $mediaName, 
-                    'file_path' => $mediaPath,
-                    'file_type' => $mediaImage->getClientMimeType(),
-                    'file_size' => $mediaImage->getSize(),
-                    'slug' => $mediaSlug,
-                    'user_id' => Auth::user()->id,
-                
-                ]);
-           
-        }
-
-
-        $post->tags()->sync($request->input('tags', []));
-        $post->save();
-
-        return $this->success(200, 'Post updated successfully', $post);
-
-
-
-
-
     }
 
     public function destroy($id)
@@ -216,5 +221,21 @@ class PostController extends Controller
     public function getByTag($tagId)
     {
         // Logic to get posts by tag ID
+    }
+
+    // GET POST BY USER
+    public function getPostByUser()
+    {
+
+        // dd(Auth::user());
+        $userId = Auth::user()->id;
+        // dd($userId);
+        $posts = Post::where('user_id', $userId)->with(['tags', 'media'])->orderBy('created_at', 'desc')->paginate(10);
+
+        if ($posts->isEmpty()) {
+            return $this->error(404, 'No posts found for this user');
+        }
+
+        return $this->success(200, 'Posts retrieved successfully', $posts);
     }
 }
